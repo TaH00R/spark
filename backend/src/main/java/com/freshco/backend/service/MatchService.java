@@ -28,6 +28,10 @@ public class MatchService {
     private final StandingService standingService;
     private final MatchWebSocketService matchWebSocketService;
 
+    // =========================================================
+    // GET ALL MATCHES
+    // =========================================================
+
     @Transactional(readOnly = true)
     public List<MatchResponse> getAllMatches() {
         return matchRepository.findAll()
@@ -36,10 +40,18 @@ public class MatchService {
                 .toList();
     }
 
+    // =========================================================
+    // GET MATCH BY ID
+    // =========================================================
+
     @Transactional(readOnly = true)
     public MatchResponse getMatchById(Long id) {
         return toResponse(findMatch(id));
     }
+
+    // =========================================================
+    // GET LIVE MATCHES
+    // =========================================================
 
     @Transactional(readOnly = true)
     public List<MatchResponse> getLiveMatches() {
@@ -50,6 +62,10 @@ public class MatchService {
                 .toList();
     }
 
+    // =========================================================
+    // GET UPCOMING MATCHES
+    // =========================================================
+
     @Transactional(readOnly = true)
     public List<MatchResponse> getUpcomingMatches() {
         return matchRepository
@@ -59,6 +75,10 @@ public class MatchService {
                 .toList();
     }
 
+    // =========================================================
+    // GET COMPLETED MATCHES
+    // =========================================================
+
     @Transactional(readOnly = true)
     public List<MatchResponse> getCompletedMatches() {
         return matchRepository
@@ -67,6 +87,10 @@ public class MatchService {
                 .map(this::toResponse)
                 .toList();
     }
+
+    // =========================================================
+    // GET MATCHES BY SPORT
+    // =========================================================
 
     @Transactional(readOnly = true)
     public List<MatchResponse> getMatchesBySport(Long sportId) {
@@ -83,6 +107,10 @@ public class MatchService {
                 .map(this::toResponse)
                 .toList();
     }
+
+    // =========================================================
+    // GET LIVE MATCHES BY SPORT
+    // =========================================================
 
     @Transactional(readOnly = true)
     public List<MatchResponse> getLiveMatchesBySport(Long sportId) {
@@ -102,6 +130,10 @@ public class MatchService {
                 .map(this::toResponse)
                 .toList();
     }
+
+    // =========================================================
+    // CREATE MATCH
+    // =========================================================
 
     public MatchResponse createMatch(MatchCreateRequest request) {
 
@@ -138,12 +170,18 @@ public class MatchService {
                 .sport(sport)
                 .teamA(teamA)
                 .teamB(teamB)
+
+                // Scores are stored as strings in your Match entity
                 .scoreA("0")
                 .scoreB("0")
+
                 .venue(request.venue())
                 .roundName(request.roundName())
                 .scheduledAt(request.scheduledAt())
+
+                // New matches always start as upcoming
                 .status(MatchStatus.UPCOMING)
+
                 .winner(null)
                 .build();
 
@@ -151,6 +189,10 @@ public class MatchService {
 
         return toResponse(savedMatch);
     }
+
+    // =========================================================
+    // UPDATE MATCH DETAILS
+    // =========================================================
 
     public MatchResponse updateMatch(
             Long id,
@@ -188,6 +230,10 @@ public class MatchService {
 
         validateTeams(sport, teamA, teamB);
 
+        /*
+         * Once a match is LIVE or COMPLETED,
+         * don't allow changing the sport or teams.
+         */
         if (match.getStatus() == MatchStatus.LIVE
                 || match.getStatus() == MatchStatus.COMPLETED) {
 
@@ -217,6 +263,10 @@ public class MatchService {
         return toResponse(match);
     }
 
+    // =========================================================
+    // UPDATE SCORE
+    // =========================================================
+
     public MatchResponse updateScore(
             Long id,
             MatchScoreRequest request
@@ -224,6 +274,10 @@ public class MatchService {
 
         Match match = findMatch(id);
 
+        /*
+         * Scores can only be changed while the match
+         * is currently LIVE.
+         */
         if (match.getStatus() != MatchStatus.LIVE) {
             throw new IllegalStateException(
                     "Score can only be updated for a live match"
@@ -233,16 +287,22 @@ public class MatchService {
         match.setScoreA(request.scoreA());
         match.setScoreB(request.scoreB());
 
+        /*
+         * Broadcast the updated score to connected clients.
+         */
         matchWebSocketService.broadcastMatchUpdate(match);
 
         return toResponse(match);
     }
 
+    // =========================================================
+    // UPDATE MATCH STATUS
+    // =========================================================
+
     public MatchResponse updateStatus(
             Long id,
             MatchStatusRequest request
     ) {
-
         Match match = findMatch(id);
 
         MatchStatus oldStatus = match.getStatus();
@@ -252,33 +312,28 @@ public class MatchService {
 
         if (newStatus == MatchStatus.COMPLETED) {
 
-            if (request.winnerTeamId() != null) {
+            int scoreA = parseScore(match.getScoreA());
+            int scoreB = parseScore(match.getScoreB());
 
-                Long winnerId = request.winnerTeamId();
+            if (scoreA > scoreB) {
 
-                if (!winnerId.equals(match.getTeamA().getId())
-                        && !winnerId.equals(match.getTeamB().getId())) {
+                // Team A wins
+                match.setWinner(match.getTeamA());
 
-                    throw new IllegalArgumentException(
-                            "Winner must be one of the teams in this match"
-                    );
-                }
+            } else if (scoreB > scoreA) {
 
-                Team winner = teamRepository
-                        .findById(winnerId)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Winner team not found"
-                                )
-                        );
-
-                match.setWinner(winner);
+                // Team B wins
+                match.setWinner(match.getTeamB());
 
             } else {
+
+                // Equal score = draw
                 match.setWinner(null);
             }
 
         } else {
+
+            // Only completed matches can have a winner
             match.setWinner(null);
         }
 
@@ -297,6 +352,10 @@ public class MatchService {
         return toResponse(match);
     }
 
+    // =========================================================
+    // DELETE MATCH
+    // =========================================================
+
     public void deleteMatch(Long id) {
 
         Match match = findMatch(id);
@@ -308,12 +367,26 @@ public class MatchService {
 
         matchRepository.delete(match);
 
+        /*
+         * If a completed match is deleted,
+         * standings must be recalculated because
+         * that match should no longer count.
+         */
         if (wasCompleted) {
-            standingService.recalculateStandings(sportId);
+            standingService.recalculateStandings(
+                    sportId
+            );
         }
 
+        /*
+         * Tell connected clients that the match changed.
+         */
         matchWebSocketService.broadcastMatchUpdate(match);
     }
+
+    // =========================================================
+    // FIND MATCH
+    // =========================================================
 
     private Match findMatch(Long id) {
 
@@ -326,24 +399,37 @@ public class MatchService {
                 );
     }
 
+    // =========================================================
+    // VALIDATE TEAMS
+    // =========================================================
+
     private void validateTeams(
             Sport sport,
             Team teamA,
             Team teamB
     ) {
 
+        /*
+         * A team cannot play against itself.
+         */
         if (teamA.getId().equals(teamB.getId())) {
             throw new IllegalArgumentException(
                     "A team cannot play against itself"
             );
         }
 
+        /*
+         * Team A must belong to the selected sport.
+         */
         if (!teamA.getSport().getId().equals(sport.getId())) {
             throw new IllegalArgumentException(
                     "Team A does not belong to this sport"
             );
         }
 
+        /*
+         * Team B must belong to the selected sport.
+         */
         if (!teamB.getSport().getId().equals(sport.getId())) {
             throw new IllegalArgumentException(
                     "Team B does not belong to this sport"
@@ -351,15 +437,26 @@ public class MatchService {
         }
     }
 
+    // =========================================================
+    // VALIDATE STATUS TRANSITION
+    // =========================================================
+
     private void validateStatusTransition(
             MatchStatus oldStatus,
             MatchStatus newStatus
     ) {
 
+        /*
+         * No transition needed if status is unchanged.
+         */
         if (oldStatus == newStatus) {
             return;
         }
 
+        /*
+         * A cancelled match can only be reopened
+         * as an upcoming match.
+         */
         if (oldStatus == MatchStatus.CANCELLED
                 && newStatus != MatchStatus.UPCOMING) {
 
@@ -368,6 +465,40 @@ public class MatchService {
             );
         }
     }
+
+    // =========================================================
+    // PARSE SCORE
+    // =========================================================
+
+    private int parseScore(String score) {
+
+        /*
+         * Your Match entity stores scoreA and scoreB
+         * as Strings.
+         *
+         * Convert them safely to integers before
+         * comparing them.
+         */
+        if (score == null || score.isBlank()) {
+            return 0;
+        }
+
+        try {
+            return Integer.parseInt(
+                    score.trim()
+            );
+
+        } catch (NumberFormatException e) {
+
+            throw new IllegalStateException(
+                    "Invalid match score: " + score
+            );
+        }
+    }
+
+    // =========================================================
+    // CONVERT ENTITY -> RESPONSE DTO
+    // =========================================================
 
     private MatchResponse toResponse(Match match) {
 

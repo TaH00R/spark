@@ -399,7 +399,8 @@ export default function AdminMatchesPage() {
 
   async function updateStatus(
     match: Match,
-    status: MatchStatus
+    status: MatchStatus,
+    winnerTeamId: number | null = null
   ) {
     try {
       setError("");
@@ -407,6 +408,10 @@ export default function AdminMatchesPage() {
 
       const payload: MatchStatusRequest = {
         status,
+        winnerTeamId:
+          status === "COMPLETED"
+            ? winnerTeamId
+            : null,
       };
 
       const updatedMatch =
@@ -423,9 +428,17 @@ export default function AdminMatchesPage() {
         )
       );
 
-      setSuccess(
-        `Match #${match.id} is now ${status}.`
-      );
+      if (status === "COMPLETED") {
+        setSuccess(
+          updatedMatch.winnerName
+            ? `Match #${match.id} completed — ${updatedMatch.winnerName} wins.`
+            : `Match #${match.id} completed — DRAW.`
+        );
+      } else {
+        setSuccess(
+          `Match #${match.id} is now ${status}.`
+        );
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -778,114 +791,150 @@ export default function AdminMatchesPage() {
                     </div>
                   </div>
 
-                  {match.status === "LIVE" && (
+                  {(match.status === "LIVE" ||
+                    match.status === "COMPLETED") && (
                     <div className="border-t-2 border-[#063b32] bg-[#e9dfca] p-5 sm:p-6">
-                      <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Zap size={20} />
-
-                            <p className="text-lg font-black uppercase sm:text-xl">
-                              Live Score Control
+                      <div className="flex flex-col gap-5">
+                        {match.status === "LIVE" && (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Zap size={20} />
+                              <p className="text-lg font-black uppercase sm:text-xl">
+                                Live Score Control
+                              </p>
+                            </div>
+                            <p className="mt-1 text-sm font-semibold opacity-55">
+                              Update the score while the match is in progress.
                             </p>
                           </div>
+                        )}
 
-                          <p className="mt-1 text-sm font-semibold opacity-55">
-                            Update the score while the match is in progress.
-                          </p>
-                        </div>
+                        {match.status === "COMPLETED" && (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Trophy size={20} />
+                              <p className="text-lg font-black uppercase sm:text-xl">
+                                Match Result
+                              </p>
+                            </div>
+                            <p className="mt-1 text-sm font-semibold opacity-55">
+                              Change the official result if it was entered incorrectly.
+                            </p>
+                          </div>
+                        )}
 
-                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="number"
-                              min={0}
-                              value={
-                                scoreValues[
-                                  match.id
-                                ]?.scoreA ??
-                                match.scoreA
-                              }
-                              onChange={(e) =>
-                                setScoreValues(
-                                  (current) => ({
+                        {match.status === "LIVE" && (
+                          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="number"
+                                min={0}
+                                value={
+                                  scoreValues[match.id]?.scoreA ??
+                                  match.scoreA
+                                }
+                                onChange={(e) =>
+                                  setScoreValues((current) => ({
                                     ...current,
                                     [match.id]: {
-                                      scoreA: Math.max(
-                                        0,
-                                        Number(
-                                          e.target.value
-                                        )
-                                      ),
+                                      scoreA: Math.max(0, Number(e.target.value)),
                                       scoreB:
-                                        current[
-                                          match.id
-                                        ]?.scoreB ??
+                                        current[match.id]?.scoreB ??
                                         match.scoreB,
                                     },
-                                  })
-                                )
-                              }
-                              className="h-14 w-20 border-2 border-[#063b32] bg-[#fbf5e8] text-center text-2xl font-black outline-none"
-                            />
+                                  }))
+                                }
+                                className="h-14 w-20 border-2 border-[#063b32] bg-[#fbf5e8] text-center text-2xl font-black outline-none"
+                              />
 
-                            <span className="text-2xl font-black">
-                              :
-                            </span>
+                              <span className="text-2xl font-black">:</span>
 
-                            <input
-                              type="number"
-                              min={0}
-                              value={
-                                scoreValues[
-                                  match.id
-                                ]?.scoreB ??
-                                match.scoreB
-                              }
-                              onChange={(e) =>
-                                setScoreValues(
-                                  (current) => ({
+                              <input
+                                type="number"
+                                min={0}
+                                value={
+                                  scoreValues[match.id]?.scoreB ??
+                                  match.scoreB
+                                }
+                                onChange={(e) =>
+                                  setScoreValues((current) => ({
                                     ...current,
                                     [match.id]: {
                                       scoreA:
-                                        current[
-                                          match.id
-                                        ]?.scoreA ??
+                                        current[match.id]?.scoreA ??
                                         match.scoreA,
-                                      scoreB: Math.max(
-                                        0,
-                                        Number(
-                                          e.target.value
-                                        )
-                                      ),
+                                      scoreB: Math.max(0, Number(e.target.value)),
                                     },
-                                  })
-                                )
-                              }
-                              className="h-14 w-20 border-2 border-[#063b32] bg-[#fbf5e8] text-center text-2xl font-black outline-none"
-                            />
-                          </div>
+                                  }))
+                                }
+                                className="h-14 w-20 border-2 border-[#063b32] bg-[#fbf5e8] text-center text-2xl font-black outline-none"
+                              />
+                            </div>
 
+                            <button
+                              onClick={() => updateScore(match)}
+                              className="flex items-center justify-center gap-2 border-2 border-[#063b32] bg-[#104c41] px-5 py-4 text-sm font-black uppercase text-[#fff7e8] shadow-[4px_4px_0_#063b32]"
+                            >
+                              <Check size={18} />
+                              Update Score
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="grid gap-3 md:grid-cols-3">
                           <button
                             onClick={() =>
-                              updateScore(match)
+                              updateStatus(match, "COMPLETED", match.teamAId)
                             }
-                            className="flex items-center justify-center gap-2 border-2 border-[#063b32] bg-[#104c41] px-5 py-4 text-sm font-black uppercase text-[#fff7e8] shadow-[4px_4px_0_#063b32]"
+                            className={`border-2 border-[#063b32] px-4 py-4 text-sm font-black uppercase shadow-[4px_4px_0_#063b32] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#063b32] ${
+                              match.winnerId === match.teamAId
+                                ? "bg-[#104c41] text-[#fff7e8]"
+                                : "bg-[#d7c85f]"
+                            }`}
                           >
-                            <Check size={18} />
-                            Update Score
+                            <Trophy size={18} className="mx-auto mb-2" />
+                            <span className="block break-words">
+                              {match.teamAName}
+                            </span>
+                            <span className="mt-1 block text-xs opacity-60">
+                              SET AS WINNER
+                            </span>
                           </button>
 
                           <button
                             onClick={() =>
-                              updateStatus(
-                                match,
-                                "COMPLETED"
-                              )
+                              updateStatus(match, "COMPLETED", match.teamBId)
                             }
-                            className="border-2 border-[#063b32] bg-[#d7c85f] px-5 py-4 text-sm font-black uppercase shadow-[4px_4px_0_#063b32]"
+                            className={`border-2 border-[#063b32] px-4 py-4 text-sm font-black uppercase shadow-[4px_4px_0_#063b32] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#063b32] ${
+                              match.winnerId === match.teamBId
+                                ? "bg-[#104c41] text-[#fff7e8]"
+                                : "bg-[#d7c85f]"
+                            }`}
                           >
-                            End Match
+                            <Trophy size={18} className="mx-auto mb-2" />
+                            <span className="block break-words">
+                              {match.teamBName}
+                            </span>
+                            <span className="mt-1 block text-xs opacity-60">
+                              SET AS WINNER
+                            </span>
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              updateStatus(match, "COMPLETED", null)
+                            }
+                            className={`border-2 border-[#063b32] px-4 py-4 text-sm font-black uppercase shadow-[4px_4px_0_#063b32] transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_#063b32] ${
+                              !match.winnerId
+                                ? "bg-[#104c41] text-[#fff7e8]"
+                                : "bg-[#d9cebb]"
+                            }`}
+                          >
+                            <span className="block text-2xl font-black">=</span>
+                            <span className="mt-2 block">DRAW</span>
+                            <span className="mt-1 block text-xs opacity-60">
+                              NO WINNER
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -924,14 +973,14 @@ export default function AdminMatchesPage() {
                         </button>
                       )}
 
-                      {match.status ===
-                        "COMPLETED" &&
-                        match.winnerName && (
-                          <div className="flex items-center gap-2 border-2 border-[#063b32] bg-[#d7c85f] px-4 py-3 text-sm font-black uppercase">
-                            <Trophy size={17} />
-                            {match.winnerName}
-                          </div>
-                        )}
+                      {match.status === "COMPLETED" && (
+                        <div className="flex items-center gap-2 border-2 border-[#063b32] bg-[#d7c85f] px-4 py-3 text-sm font-black uppercase">
+                          <Trophy size={17} />
+                          {match.winnerName
+                            ? `Winner: ${match.winnerName}`
+                            : "DRAW"}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex gap-3">

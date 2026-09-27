@@ -6,18 +6,25 @@ export type MatchStatus =
 
 export type Match = {
   id: number;
+
   sportId: number;
   sportName: string;
+
   teamAId: number;
   teamAName: string;
   scoreA: number;
+
   teamBId: number;
   teamBName: string;
   scoreB: number;
+
   venue: string | null;
   roundName: string | null;
   scheduledAt: string;
+
   status: MatchStatus;
+
+  // Returned by MatchResponse from the backend.
   winnerId: number | null;
   winnerName: string | null;
 };
@@ -41,4 +48,8 @@ export type MatchScoreRequest = {
 
 export type MatchStatusRequest = {
   status: MatchStatus;
+
+  // Send the selected team's ID when completing a match.
+  // null means the match is a draw.
+  winnerTeamId?: number | null;
 };
