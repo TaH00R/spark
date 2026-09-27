@@ -35,9 +35,8 @@ export default async function MatchesPage() {
     return matches.reduce(
       (groups, match) => {
         const sportName =
-          match.sport?.name ||
-          match.sportName ||
-          "Other";
+  match.sportName ||
+  "Other";
 
         if (!groups[sportName]) {
           groups[sportName] = [];
